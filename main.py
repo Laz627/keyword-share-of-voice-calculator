@@ -61,7 +61,7 @@ def process_file(uploaded_file, designated_domains):
         {'Search Volume': 'sum', 'Estimated Traffic': 'sum'}
     ).reset_index()
 
-    # Sort and filter top 3 pages for each domain
+    # Sort and filter top 3 pages for each domain by Estimated Traffic
     top_pages = top_pages.sort_values(by=['Ranked Domain Name', 'Estimated Traffic'], ascending=[True, False])
     top_pages = top_pages.groupby('Ranked Domain Name').head(3).reset_index(drop=True)
 
