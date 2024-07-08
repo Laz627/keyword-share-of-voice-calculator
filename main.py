@@ -44,11 +44,9 @@ def process_file(uploaded_file, designated_domains):
     top_domains['Rank'] = top_domains.index + 1
     top_domains = top_domains[['Rank', 'Domain', 'Total Estimated Traffic', 'Total Search Volume']]
 
-    # Include designated domains if specified
-    designated_domains_traffic = pd.DataFrame()
-    if designated_domains:
-        designated_domains_traffic = domain_traffic[domain_traffic['Domain'].isin(designated_domains)]
-        designated_domains_traffic = designated_domains_traffic[~designated_domains_traffic['Domain'].isin(top_domains['Domain'])]
+    # Filter out designated domains for separate table
+    designated_domains_traffic = domain_traffic[domain_traffic['Domain'].isin(designated_domains)]
+    designated_domains_traffic = designated_domains_traffic[~designated_domains_traffic['Domain'].isin(top_domains['Domain'])]
 
     # Convert columns to appropriate types
     top_domains = top_domains.astype({'Rank': 'int', 'Total Estimated Traffic': 'int', 'Total Search Volume': 'int'})
