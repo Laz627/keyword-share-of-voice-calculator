@@ -58,6 +58,11 @@ def process_file(uploaded_file, designated_domains):
         top_domains.reset_index(inplace=True)
         top_domains.rename(columns={'index': 'Rank'}, inplace=True)
 
+    # Convert columns to appropriate types
+    top_domains = top_domains.astype({'Rank': 'int', 'Total Estimated Traffic': 'int', 'Total Search Volume': 'int'})
+    if not designated_domains_traffic.empty:
+        designated_domains_traffic = designated_domains_traffic.astype({'Total Estimated Traffic': 'int', 'Total Search Volume': 'int'})
+
     # Filter for top 20 domains and non-blank page URLs
     top_pages = df[df['Ranked Domain Name'].isin(top_domains['Domain']) & (df['Ranked Page URL'] != '')]
 
@@ -72,6 +77,9 @@ def process_file(uploaded_file, designated_domains):
 
     # Rename columns
     top_pages.columns = ['Domain', 'Page URL', 'Total Search Volume', 'Total Estimated Traffic']
+
+    # Convert columns to appropriate types
+    top_pages = top_pages.astype({'Total Search Volume': 'int', 'Total Estimated Traffic': 'int'})
 
     return top_domains, designated_domains_traffic, top_pages
 
