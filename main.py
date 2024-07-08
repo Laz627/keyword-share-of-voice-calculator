@@ -36,22 +36,22 @@ def process_file(uploaded_file, designated_domains):
     ).reset_index()
     domain_traffic.columns = ['Domain', 'Total Estimated Traffic', 'Total Search Volume']
 
-    # Sort by estimated traffic
-    top_domains = domain_traffic.sort_values(by='Total Estimated Traffic', ascending=False).head(20)
+    # Sort by estimated traffic for full list
+    domain_traffic = domain_traffic.sort_values(by='Total Estimated Traffic', ascending=False).reset_index(drop=True)
 
-    # Add ranking column (1-20)
-    top_domains.reset_index(drop=True, inplace=True)
-    top_domains['Rank'] = top_domains.index + 1
-    top_domains = top_domains[['Rank', 'Domain', 'Total Estimated Traffic', 'Total Search Volume']]
+    # Add ranking column for full list
+    domain_traffic['Rank'] = domain_traffic.index + 1
+
+    # Select top 20 domains
+    top_domains = domain_traffic.head(20)
 
     # Filter out designated domains for separate table
     designated_domains_traffic = domain_traffic[domain_traffic['Domain'].isin(designated_domains)]
-    designated_domains_traffic = designated_domains_traffic[~designated_domains_traffic['Domain'].isin(top_domains['Domain'])]
 
     # Convert columns to appropriate types
     top_domains = top_domains.astype({'Rank': 'int', 'Total Estimated Traffic': 'int', 'Total Search Volume': 'int'})
     if not designated_domains_traffic.empty:
-        designated_domains_traffic = designated_domains_traffic.astype({'Total Estimated Traffic': 'int', 'Total Search Volume': 'int'})
+        designated_domains_traffic = designated_domains_traffic.astype({'Rank': 'int', 'Total Estimated Traffic': 'int', 'Total Search Volume': 'int'})
 
     # Filter for top 20 domains and non-blank page URLs
     top_pages = df[df['Ranked Domain Name'].isin(top_domains['Domain']) & (df['Ranked Page URL'] != '')]
