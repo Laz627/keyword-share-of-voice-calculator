@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import io
 
-# Define the CTR curve
+# Define the CTR curve as percentages
 ctr_curve = {
     1: 44.97, 2: 13.62, 3: 8.65, 4: 4.96, 5: 3.05, 6: 2.61,
     7: 2.38, 8: 2.47, 9: 2.55, 10: 1.92, 11: 2.31, 12: 2.35,
@@ -31,35 +31,27 @@ def process_file(uploaded_file, designated_domains):
     )
 
     # Aggregate traffic by domain
-    domain_traffic = df.groupby('Ranked Domain Name')['Estimated Traffic'].sum().reset_index()
-    domain_traffic.columns = ['Domain', 'Total Estimated Traffic']
+    domain_traffic = df.groupby('Ranked Domain Name').agg(
+        {'Estimated Traffic': 'sum', 'Search Volume': 'sum'}
+    ).reset_index()
+    domain_traffic.columns = ['Domain', 'Total Estimated Traffic', 'Total Search Volume']
 
-    # Include designated domains
-    designated_domains_traffic = domain_traffic[domain_traffic['Domain'].isin(designated_domains)]
+    # Include designated domains if specified
+    if designated_domains:
+        designated_domains_traffic = domain_traffic[domain_traffic['Domain'].isin(designated_domains)]
+    else:
+        designated_domains_traffic = pd.DataFrame(columns=['Domain', 'Total Estimated Traffic', 'Total Search Volume'])
 
     # Sort by estimated traffic
     top_domains = domain_traffic.sort_values(by='Total Estimated Traffic', ascending=False).head(20)
 
     # Top 3 pages for the top 20 domains
-    top_pages = df[df['Ranked Domain Name'].isin(top_domains['Domain'])]
-    top_pages = top_pages.groupby(['Ranked Domain Name', 'Ranked Page URL'])['Search Volume'].sum().reset_index()
-    top_pages.columns = ['Domain', 'Page URL', 'Total Search Volume']
-
-    # Ensure 'Total Search Volume' is numeric
-    top_pages['Total Search Volume'] = pd.to_numeric(top_pages['Total Search Volume'], errors='coerce')
-
-    # Check for any missing values
-    if top_pages['Total Search Volume'].isnull().any():
-        st.write("There are missing or non-numeric values in 'Total Search Volume' which have been filled with 0.")
-        top_pages['Total Search Volume'].fillna(0, inplace=True)
-
-    try:
-        top_pages = top_pages.groupby('Domain').apply(lambda x: x.nlargest(3, 'Total Search Volume')).reset_index(drop=True)
-    except Exception as e:
-        st.error(f"An error occurred while processing top pages: {e}")
-        st.write("Debugging Information:")
-        st.write(top_pages)
-        raise
+    top_pages = df[df['Ranked Domain Name'].isin(top_domains['Domain']) & df['Ranked Page URL'] != '']
+    top_pages = top_pages.groupby(['Ranked Domain Name', 'Ranked Page URL']).agg(
+        {'Search Volume': 'sum', 'Estimated Traffic': 'sum'}
+    ).reset_index()
+    top_pages.columns = ['Domain', 'Page URL', 'Total Search Volume', 'Total Estimated Traffic']
+    top_pages = top_pages.groupby('Domain').apply(lambda x: x.nlargest(3, 'Total Estimated Traffic')).reset_index(drop=True)
 
     return top_domains, designated_domains_traffic, top_pages
 
@@ -94,7 +86,7 @@ uploaded_file = st.file_uploader("Upload your keyword data Excel file", type=["x
 
 # Designated domains input
 designated_domains_input = st.text_input("Enter designated domains (comma-separated)", value="")
-designated_domains = [domain.strip() for domain in designated_domains_input.split(",")]
+designated_domains = [domain.strip() for domain in designated_domains_input.split(",") if domain.strip()]
 
 # Process the file if uploaded
 if uploaded_file:
@@ -108,7 +100,10 @@ if uploaded_file:
     st.dataframe(top_domains)
 
     st.write('### Designated Domains Traffic')
-    st.dataframe(designated_domains_traffic)
+    if not designated_domains_traffic.empty:
+        st.dataframe(designated_domains_traffic)
+    else:
+        st.write("No designated domains specified.")
 
     st.write('### Top 3 Pages for Top 20 Domains')
     st.dataframe(top_pages)
