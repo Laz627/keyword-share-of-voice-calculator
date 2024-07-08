@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import io
 
 # Define the CTR curve
 ctr_curve = {
@@ -47,10 +48,31 @@ def process_file(uploaded_file, designated_domains):
 
     return top_domains, designated_domains_traffic, top_pages
 
+# Function to create a sample template
+def create_sample_template():
+    sample_data = {
+        'Keywords': ['sample keyword 1', 'sample keyword 2'],
+        'Keyword Ranking': [1, 2],
+        'Search Volume': [1000, 800],
+        'Ranked Domain Name': ['example.com', 'example2.com'],
+        'Ranked Page URL': ['https://www.example.com/page1', 'https://www.example2.com/page2']
+    }
+    df = pd.DataFrame(sample_data)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Sheet1')
+        writer.save()
+    return output.getvalue()
+
 # Streamlit app
 st.title('Share of Voice Analysis Tool')
 st.write('### Created by: Brandon Lazovic')
 st.write('This tool allows you to upload keyword ranking data and get a share of voice analysis for the top domains.')
+
+# Provide sample template download
+st.write('### Download Sample Template')
+template = create_sample_template()
+st.download_button(label='Download Sample Template', data=template, file_name='sample_template.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 # File uploader
 uploaded_file = st.file_uploader("Upload your keyword data Excel file", type=["xlsx"])
@@ -92,13 +114,14 @@ if uploaded_file:
 # Instructions
 st.write('''
 ## Instructions
-1. Upload an Excel file with the following columns: 
+1. Download the sample template and fill in your keyword data.
+2. Upload an Excel file with the following columns: 
    - Keywords
    - Keyword Rankings (1-100)
    - Keyword Search Volume
    - Ranked Domain Name (domain.com, www.domain.com, etc...)
    - Ranked Page URL (https://www.domain.com/page-url, subdomain.domain.com/page-url, etc...)
-2. Enter any designated domains you want to be returned, separated by commas.
-3. The tool will process the data and display the top 20 domains by estimated traffic, traffic for designated domains, and top 3 pages for the top 20 domains.
-4. You can download the results as Excel files.
+3. Enter any designated domains you want to be returned, separated by commas.
+4. The tool will process the data and display the top 20 domains by estimated traffic, traffic for designated domains, and top 3 pages for the top 20 domains.
+5. You can download the results as Excel files.
 ''')
