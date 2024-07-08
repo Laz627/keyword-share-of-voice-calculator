@@ -39,28 +39,26 @@ def process_file(uploaded_file, designated_domains):
     # Sort by estimated traffic
     top_domains = domain_traffic.sort_values(by='Total Estimated Traffic', ascending=False).head(20)
 
-    # Add ranking column (1-20)
-    top_domains.reset_index(drop=True, inplace=True)
-    top_domains['Rank'] = top_domains.index + 1
-    top_domains = top_domains[['Rank', 'Domain', 'Total Estimated Traffic', 'Total Search Volume']]
-
     # Include designated domains if specified
     if designated_domains:
         designated_domains_traffic = domain_traffic[domain_traffic['Domain'].isin(designated_domains)]
         # Ensure designated domains are included in the top domains table
-        top_domains = pd.concat([top_domains, designated_domains_traffic]).drop_duplicates(subset='Domain').reset_index(drop=True)
-        top_domains = top_domains.sort_values(by='Total Estimated Traffic', ascending=False).reset_index(drop=True)
-        top_domains['Rank'] = top_domains.index + 1
+        combined_domains = pd.concat([top_domains, designated_domains_traffic]).drop_duplicates(subset='Domain')
     else:
         designated_domains_traffic = pd.DataFrame(columns=['Domain', 'Total Estimated Traffic', 'Total Search Volume'])
+        combined_domains = top_domains
+
+    # Re-sort and re-rank the combined domains
+    combined_domains = combined_domains.sort_values(by='Total Estimated Traffic', ascending=False).reset_index(drop=True)
+    combined_domains['Rank'] = combined_domains.index + 1
 
     # Convert columns to appropriate types
-    top_domains = top_domains.astype({'Rank': 'int', 'Total Estimated Traffic': 'int', 'Total Search Volume': 'int'})
+    combined_domains = combined_domains.astype({'Rank': 'int', 'Total Estimated Traffic': 'int', 'Total Search Volume': 'int'})
     if not designated_domains_traffic.empty:
         designated_domains_traffic = designated_domains_traffic.astype({'Total Estimated Traffic': 'int', 'Total Search Volume': 'int'})
 
     # Filter for top 20 domains and non-blank page URLs
-    top_pages = df[df['Ranked Domain Name'].isin(top_domains['Domain']) & (df['Ranked Page URL'] != '')]
+    top_pages = df[df['Ranked Domain Name'].isin(combined_domains['Domain']) & (df['Ranked Page URL'] != '')]
 
     # Group by domain and page URL, and calculate total search volume and estimated traffic
     top_pages = top_pages.groupby(['Ranked Domain Name', 'Ranked Page URL']).agg(
@@ -77,7 +75,7 @@ def process_file(uploaded_file, designated_domains):
     # Convert columns to appropriate types
     top_pages = top_pages.astype({'Total Search Volume': 'int', 'Total Estimated Traffic': 'int'})
 
-    return top_domains, designated_domains_traffic, top_pages
+    return combined_domains, designated_domains_traffic, top_pages
 
 # Function to create a sample template
 def create_sample_template():
@@ -115,13 +113,13 @@ designated_domains = [domain.strip() for domain in designated_domains_input.spli
 # Process the file if uploaded
 if uploaded_file:
     with st.spinner('Processing...'):
-        top_domains, designated_domains_traffic, top_pages = process_file(uploaded_file, designated_domains)
+        combined_domains, designated_domains_traffic, top_pages = process_file(uploaded_file, designated_domains)
 
     st.success('Processing complete!')
 
     # Display results
     st.write('### Top 20 Domains by Estimated Traffic')
-    st.dataframe(top_domains)
+    st.dataframe(combined_domains)
 
     st.write('### Designated Domains Traffic')
     if not designated_domains_traffic.empty:
@@ -134,22 +132,22 @@ if uploaded_file:
 
     # Provide download options
     st.write('### Download Results')
-    top_domains_file = io.BytesIO()
+    combined_domains_file = io.BytesIO()
     designated_domains_traffic_file = io.BytesIO()
     top_pages_file = io.BytesIO()
 
-    with pd.ExcelWriter(top_domains_file, engine='xlsxwriter') as writer:
-        top_domains.to_excel(writer, index=False, sheet_name='Top Domains')
+    with pd.ExcelWriter(combined_domains_file, engine='xlsxwriter') as writer:
+        combined_domains.to_excel(writer, index=False, sheet_name='Top Domains')
     with pd.ExcelWriter(designated_domains_traffic_file, engine='xlsxwriter') as writer:
         designated_domains_traffic.to_excel(writer, index=False, sheet_name='Designated Domains Traffic')
     with pd.ExcelWriter(top_pages_file, engine='xlsxwriter') as writer:
         top_pages.to_excel(writer, index=False, sheet_name='Top Pages')
 
-    top_domains_file.seek(0)
+    combined_domains_file.seek(0)
     designated_domains_traffic_file.seek(0)
     top_pages_file.seek(0)
 
-    st.download_button(label='Download Top Domains', data=top_domains_file, file_name='top_domains.xlsx')
+    st.download_button(label='Download Top Domains', data=combined_domains_file, file_name='top_domains.xlsx')
     st.download_button(label='Download Designated Domains Traffic', data=designated_domains_traffic_file, file_name='designated_domains_traffic.xlsx')
     st.download_button(label='Download Top Pages', data=top_pages_file, file_name='top_pages.xlsx')
 
