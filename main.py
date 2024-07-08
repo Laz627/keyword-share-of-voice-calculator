@@ -44,7 +44,22 @@ def process_file(uploaded_file, designated_domains):
     top_pages = df[df['Ranked Domain Name'].isin(top_domains['Domain'])]
     top_pages = top_pages.groupby(['Ranked Domain Name', 'Ranked Page URL'])['Search Volume'].sum().reset_index()
     top_pages.columns = ['Domain', 'Page URL', 'Total Search Volume']
-    top_pages = top_pages.groupby('Domain').apply(lambda x: x.nlargest(3, 'Total Search Volume')).reset_index(drop=True)
+
+    # Ensure 'Total Search Volume' is numeric
+    top_pages['Total Search Volume'] = pd.to_numeric(top_pages['Total Search Volume'], errors='coerce')
+
+    # Check for any missing values
+    if top_pages['Total Search Volume'].isnull().any():
+        st.write("There are missing or non-numeric values in 'Total Search Volume' which have been filled with 0.")
+        top_pages['Total Search Volume'].fillna(0, inplace=True)
+
+    try:
+        top_pages = top_pages.groupby('Domain').apply(lambda x: x.nlargest(3, 'Total Search Volume')).reset_index(drop=True)
+    except Exception as e:
+        st.error(f"An error occurred while processing top pages: {e}")
+        st.write("Debugging Information:")
+        st.write(top_pages)
+        raise
 
     return top_domains, designated_domains_traffic, top_pages
 
