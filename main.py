@@ -61,8 +61,8 @@ def create_sample_template():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Sheet1')
-        writer.save()
-    return output.getvalue()
+    output.seek(0)
+    return output
 
 # Streamlit app
 st.title('Share of Voice Analysis Tool')
@@ -100,16 +100,24 @@ if uploaded_file:
 
     # Provide download options
     st.write('### Download Results')
-    top_domains.to_excel('top_domains.xlsx', index=False)
-    designated_domains_traffic.to_excel('designated_domains_traffic.xlsx', index=False)
-    top_pages.to_excel('top_pages.xlsx', index=False)
+    top_domains_file = io.BytesIO()
+    designated_domains_traffic_file = io.BytesIO()
+    top_pages_file = io.BytesIO()
 
-    with open('top_domains.xlsx', 'rb') as file:
-        st.download_button(label='Download Top Domains', data=file, file_name='top_domains.xlsx')
-    with open('designated_domains_traffic.xlsx', 'rb') as file:
-        st.download_button(label='Download Designated Domains Traffic', data=file, file_name='designated_domains_traffic.xlsx')
-    with open('top_pages.xlsx', 'rb') as file:
-        st.download_button(label='Download Top Pages', data=file, file_name='top_pages.xlsx')
+    with pd.ExcelWriter(top_domains_file, engine='xlsxwriter') as writer:
+        top_domains.to_excel(writer, index=False, sheet_name='Top Domains')
+    with pd.ExcelWriter(designated_domains_traffic_file, engine='xlsxwriter') as writer:
+        designated_domains_traffic.to_excel(writer, index=False, sheet_name='Designated Domains Traffic')
+    with pd.ExcelWriter(top_pages_file, engine='xlsxwriter') as writer:
+        top_pages.to_excel(writer, index=False, sheet_name='Top Pages')
+
+    top_domains_file.seek(0)
+    designated_domains_traffic_file.seek(0)
+    top_pages_file.seek(0)
+
+    st.download_button(label='Download Top Domains', data=top_domains_file, file_name='top_domains.xlsx')
+    st.download_button(label='Download Designated Domains Traffic', data=designated_domains_traffic_file, file_name='designated_domains_traffic.xlsx')
+    st.download_button(label='Download Top Pages', data=top_pages_file, file_name='top_pages.xlsx')
 
 # Instructions
 st.write('''
