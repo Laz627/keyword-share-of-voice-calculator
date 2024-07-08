@@ -71,7 +71,7 @@ def process_file(uploaded_file, designated_domains):
     # Convert columns to appropriate types
     top_pages = top_pages.astype({'Total Search Volume': 'int', 'Total Estimated Traffic': 'int'})
 
-    return top_domains, designated_domains_traffic, top_pages
+    return top_domains, designated_domains_traffic, top_pages, domain_traffic
 
 # Function to create a sample template
 def create_sample_template():
@@ -109,7 +109,7 @@ designated_domains = [domain.strip() for domain in designated_domains_input.spli
 # Process the file if uploaded
 if uploaded_file:
     with st.spinner('Processing...'):
-        top_domains, designated_domains_traffic, top_pages = process_file(uploaded_file, designated_domains)
+        top_domains, designated_domains_traffic, top_pages, full_domain_list = process_file(uploaded_file, designated_domains)
 
     st.success('Processing complete!')
 
@@ -131,6 +131,7 @@ if uploaded_file:
     top_domains_file = io.BytesIO()
     designated_domains_traffic_file = io.BytesIO()
     top_pages_file = io.BytesIO()
+    full_domain_list_file = io.BytesIO()
 
     with pd.ExcelWriter(top_domains_file, engine='xlsxwriter') as writer:
         top_domains.to_excel(writer, index=False, sheet_name='Top Domains')
@@ -138,14 +139,18 @@ if uploaded_file:
         designated_domains_traffic.to_excel(writer, index=False, sheet_name='Designated Domains Traffic')
     with pd.ExcelWriter(top_pages_file, engine='xlsxwriter') as writer:
         top_pages.to_excel(writer, index=False, sheet_name='Top Pages')
+    with pd.ExcelWriter(full_domain_list_file, engine='xlsxwriter') as writer:
+        full_domain_list.to_excel(writer, index=False, sheet_name='Full Domain List')
 
     top_domains_file.seek(0)
     designated_domains_traffic_file.seek(0)
     top_pages_file.seek(0)
+    full_domain_list_file.seek(0)
 
     st.download_button(label='Download Top Domains', data=top_domains_file, file_name='top_domains.xlsx')
     st.download_button(label='Download Designated Domains Traffic', data=designated_domains_traffic_file, file_name='designated_domains_traffic.xlsx')
     st.download_button(label='Download Top Pages', data=top_pages_file, file_name='top_pages.xlsx')
+    st.download_button(label='Download Full Domain List', data=full_domain_list_file, file_name='full_domain_list.xlsx')
 
 # Instructions
 st.write('''
