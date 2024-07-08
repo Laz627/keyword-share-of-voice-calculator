@@ -45,16 +45,19 @@ def process_file(uploaded_file, designated_domains):
     top_domains = top_domains[['Rank', 'Domain', 'Total Estimated Traffic', 'Total Search Volume']]
 
     # Include designated domains if specified
-    designated_domains_traffic = pd.DataFrame()
     if designated_domains:
         designated_domains_traffic = domain_traffic[domain_traffic['Domain'].isin(designated_domains)]
         # Ensure designated domains are included in the top domains table
-        for domain in designated_domains:
-            if domain not in top_domains['Domain'].values:
-                top_domains = pd.concat([top_domains, designated_domains_traffic[designated_domains_traffic['Domain'] == domain]], ignore_index=True)
-                top_domains.reset_index(drop=True, inplace=True)
-                top_domains['Rank'] = top_domains.index + 1
-                top_domains = top_domains[['Rank', 'Domain', 'Total Estimated Traffic', 'Total Search Volume']]
+        top_domains = pd.concat([top_domains, designated_domains_traffic]).drop_duplicates(subset='Domain').reset_index(drop=True)
+        top_domains = top_domains.sort_values(by='Total Estimated Traffic', ascending=False).reset_index(drop=True)
+        top_domains['Rank'] = top_domains.index + 1
+    else:
+        designated_domains_traffic = pd.DataFrame(columns=['Domain', 'Total Estimated Traffic', 'Total Search Volume'])
+
+    # Convert columns to appropriate types
+    top_domains = top_domains.astype({'Rank': 'int', 'Total Estimated Traffic': 'int', 'Total Search Volume': 'int'})
+    if not designated_domains_traffic.empty:
+        designated_domains_traffic = designated_domains_traffic.astype({'Total Estimated Traffic': 'int', 'Total Search Volume': 'int'})
 
     # Filter for top 20 domains and non-blank page URLs
     top_pages = df[df['Ranked Domain Name'].isin(top_domains['Domain']) & (df['Ranked Page URL'] != '')]
@@ -72,9 +75,6 @@ def process_file(uploaded_file, designated_domains):
     top_pages.columns = ['Domain', 'Page URL', 'Total Search Volume', 'Total Estimated Traffic']
 
     # Convert columns to appropriate types
-    top_domains = top_domains.astype({'Rank': 'int', 'Total Estimated Traffic': 'int', 'Total Search Volume': 'int'})
-    if not designated_domains_traffic.empty:
-        designated_domains_traffic = designated_domains_traffic.astype({'Total Estimated Traffic': 'int', 'Total Search Volume': 'int'})
     top_pages = top_pages.astype({'Total Search Volume': 'int', 'Total Estimated Traffic': 'int'})
 
     return top_domains, designated_domains_traffic, top_pages
