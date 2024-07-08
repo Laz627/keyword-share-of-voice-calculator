@@ -37,8 +37,10 @@ def process_file(uploaded_file, designated_domains):
     domain_traffic.columns = ['Domain', 'Total Estimated Traffic', 'Total Search Volume']
 
     # Sort by estimated traffic and then by search volume if estimated traffic is zero
-    domain_traffic['Sort Order'] = np.where(domain_traffic['Total Estimated Traffic'] == 0, domain_traffic['Total Search Volume'], domain_traffic['Total Estimated Traffic'])
-    domain_traffic = domain_traffic.sort_values(by=['Total Estimated Traffic', 'Total Search Volume'], ascending=[False, False]).reset_index(drop=True)
+    domain_traffic = domain_traffic.sort_values(
+        by=['Total Estimated Traffic', 'Total Search Volume'], 
+        ascending=[False, False]
+    ).reset_index(drop=True)
 
     # Add ranking column for full list
     domain_traffic['Rank'] = domain_traffic.index + 1
@@ -141,6 +143,7 @@ if uploaded_file:
     with pd.ExcelWriter(top_pages_file, engine='xlsxwriter') as writer:
         top_pages.to_excel(writer, index=False, sheet_name='Top Pages')
     with pd.ExcelWriter(full_domain_list_file, engine='xlsxwriter') as writer:
+        full_domain_list.drop(columns=['Sort Order'], inplace=True)  # Drop 'Sort Order' column if it exists
         full_domain_list.to_excel(writer, index=False, sheet_name='Full Domain List')
 
     top_domains_file.seek(0)
