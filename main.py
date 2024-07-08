@@ -14,7 +14,7 @@ ctr_curve = {
 # Function to estimate traffic based on position
 def estimate_traffic(position, search_volume):
     if position in ctr_curve:
-        return (ctr_curve[position] / 100) * search_volume
+        return round((ctr_curve[position] / 100) * search_volume)
     return 0
 
 # Function to process the uploaded file
@@ -52,6 +52,15 @@ def process_file(uploaded_file, designated_domains):
     ).reset_index()
     top_pages.columns = ['Domain', 'Page URL', 'Total Search Volume', 'Total Estimated Traffic']
     top_pages = top_pages.groupby('Domain').apply(lambda x: x.nlargest(3, 'Total Estimated Traffic')).reset_index(drop=True)
+    top_pages = top_pages.sort_values(by=['Domain', 'Total Estimated Traffic'], ascending=[True, False])
+
+    # Round the numbers
+    top_domains['Total Estimated Traffic'] = top_domains['Total Estimated Traffic'].round().astype(int)
+    top_domains['Total Search Volume'] = top_domains['Total Search Volume'].round().astype(int)
+    designated_domains_traffic['Total Estimated Traffic'] = designated_domains_traffic['Total Estimated Traffic'].round().astype(int)
+    designated_domains_traffic['Total Search Volume'] = designated_domains_traffic['Total Search Volume'].round().astype(int)
+    top_pages['Total Estimated Traffic'] = top_pages['Total Estimated Traffic'].round().astype(int)
+    top_pages['Total Search Volume'] = top_pages['Total Search Volume'].round().astype(int)
 
     return top_domains, designated_domains_traffic, top_pages
 
