@@ -36,8 +36,9 @@ def process_file(uploaded_file, designated_domains):
     ).reset_index()
     domain_traffic.columns = ['Domain', 'Total Estimated Traffic', 'Total Search Volume']
 
-    # Sort by estimated traffic for full list
-    domain_traffic = domain_traffic.sort_values(by='Total Estimated Traffic', ascending=False).reset_index(drop=True)
+    # Sort by estimated traffic and then by search volume if estimated traffic is zero
+    domain_traffic['Sort Order'] = np.where(domain_traffic['Total Estimated Traffic'] == 0, domain_traffic['Total Search Volume'], domain_traffic['Total Estimated Traffic'])
+    domain_traffic = domain_traffic.sort_values(by=['Sort Order', 'Total Search Volume'], ascending=[False, False]).reset_index(drop=True)
 
     # Add ranking column for full list
     domain_traffic['Rank'] = domain_traffic.index + 1
