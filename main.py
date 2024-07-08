@@ -143,7 +143,8 @@ if uploaded_file:
     with pd.ExcelWriter(top_pages_file, engine='xlsxwriter') as writer:
         top_pages.to_excel(writer, index=False, sheet_name='Top Pages')
     with pd.ExcelWriter(full_domain_list_file, engine='xlsxwriter') as writer:
-        full_domain_list.drop(columns=['Sort Order'], inplace=True)  # Drop 'Sort Order' column if it exists
+        if 'Sort Order' in full_domain_list.columns:
+            full_domain_list = full_domain_list.drop(columns=['Sort Order'])  # Drop 'Sort Order' column if it exists
         full_domain_list.to_excel(writer, index=False, sheet_name='Full Domain List')
 
     top_domains_file.seek(0)
