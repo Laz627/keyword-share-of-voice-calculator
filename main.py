@@ -51,14 +51,20 @@ def process_file(uploaded_file, designated_domains):
     top_domains.reset_index(inplace=True)
     top_domains.rename(columns={'index': 'Rank'}, inplace=True)
 
-    # Top 3 pages for the top 20 domains
-    top_pages = df[df['Ranked Domain Name'].isin(top_domains['Domain']) & df['Ranked Page URL'] != '']
+    # Filter for top 20 domains and non-blank page URLs
+    top_pages = df[df['Ranked Domain Name'].isin(top_domains['Domain']) & (df['Ranked Page URL'] != '')]
+
+    # Group by domain and page URL, and calculate total search volume and estimated traffic
     top_pages = top_pages.groupby(['Ranked Domain Name', 'Ranked Page URL']).agg(
         {'Search Volume': 'sum', 'Estimated Traffic': 'sum'}
     ).reset_index()
+
+    # Sort and filter top 3 pages for each domain
+    top_pages = top_pages.sort_values(by=['Ranked Domain Name', 'Estimated Traffic'], ascending=[True, False])
+    top_pages = top_pages.groupby('Ranked Domain Name').head(3).reset_index(drop=True)
+
+    # Rename columns
     top_pages.columns = ['Domain', 'Page URL', 'Total Search Volume', 'Total Estimated Traffic']
-    top_pages = top_pages.groupby('Domain').apply(lambda x: x.nlargest(3, 'Total Estimated Traffic')).reset_index(drop=True)
-    top_pages = top_pages.sort_values(by=['Domain', 'Total Estimated Traffic'], ascending=[True, False])
 
     return top_domains, designated_domains_traffic, top_pages
 
