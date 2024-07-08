@@ -46,19 +46,17 @@ def process_file(uploaded_file, designated_domains):
     top_domains.rename(columns={'index': 'Rank'}, inplace=True)
 
     # Include designated domains if specified
+    designated_domains_traffic = pd.DataFrame()
     if designated_domains:
         designated_domains_traffic = domain_traffic[domain_traffic['Domain'].isin(designated_domains)]
         # Ensure designated domains are included in the top domains table
-        if not designated_domains_traffic.empty:
-            designated_domains_traffic = designated_domains_traffic[~designated_domains_traffic['Domain'].isin(top_domains['Domain'])]
-            if not designated_domains_traffic.empty:
-                top_domains = pd.concat([top_domains, designated_domains_traffic])
-                top_domains.reset_index(drop=True, inplace=True)
-                top_domains.index += 1
-                top_domains.reset_index(inplace=True)
-                top_domains.rename(columns={'index': 'Rank'}, inplace=True)
-    else:
-        designated_domains_traffic = pd.DataFrame(columns=['Domain', 'Total Estimated Traffic', 'Total Search Volume'])
+        for domain in designated_domains:
+            if domain not in top_domains['Domain'].values:
+                top_domains = pd.concat([top_domains, designated_domains_traffic[designated_domains_traffic['Domain'] == domain]], ignore_index=True)
+        top_domains.reset_index(drop=True, inplace=True)
+        top_domains.index += 1
+        top_domains.reset_index(inplace=True)
+        top_domains.rename(columns={'index': 'Rank'}, inplace=True)
 
     # Filter for top 20 domains and non-blank page URLs
     top_pages = df[df['Ranked Domain Name'].isin(top_domains['Domain']) & (df['Ranked Page URL'] != '')]
@@ -125,7 +123,7 @@ if uploaded_file:
     if not designated_domains_traffic.empty:
         st.dataframe(designated_domains_traffic)
     else:
-        st.write("No designated domains specified.")
+        st.write("No designated domains specified or not found in the data.")
 
     st.write('### Top 3 Pages for Top 20 Domains')
     st.dataframe(top_pages)
