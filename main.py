@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
+import re
+from urllib.parse import urlparse
 
 # Define the CTR curve as percentages
 ctr_curve = {
@@ -10,6 +12,21 @@ ctr_curve = {
     13: 2.42, 14: 2.58, 15: 2.51, 16: 2.12, 17: 1.99, 18: 1.9,
     19: 1.76, 20: 1.3
 }
+
+def normalize_domain(domain):
+    # Remove protocol if present
+    domain = re.sub(r'^https?://', '', domain)
+    
+    # Parse the domain
+    parsed = urlparse('//' + domain)
+    
+    # Get the network location (domain)
+    domain = parsed.netloc
+    
+    # Remove 'www.' if present
+    domain = re.sub(r'^www\.', '', domain)
+    
+    return domain
 
 # Function to estimate traffic based on position
 def estimate_traffic(position, search_volume):
@@ -41,6 +58,9 @@ def clean_data(df):
     df['Ranked Domain Name'] = df['Ranked Domain Name'].fillna('Unknown')
     df['Ranked Page URL'] = df['Ranked Page URL'].fillna('')
     
+    # Normalize domain names
+    df['Ranked Domain Name'] = df['Ranked Domain Name'].apply(normalize_domain)
+    
     return df
 
 # Function to process the uploaded file
@@ -50,6 +70,9 @@ def process_file(uploaded_file, designated_domains):
 
     # Clean and preprocess the data
     df = clean_data(df)
+
+    # Normalize designated domains
+    designated_domains = [normalize_domain(domain) for domain in designated_domains]
 
     # Estimate traffic for each row
     df['Estimated Traffic'] = df.apply(
@@ -191,7 +214,7 @@ st.write('''
    - Keywords
    - Keyword Rankings (1-100)
    - Keyword Search Volume
-   - Ranked Domain Name (domain.com, www.domain.com, etc...)
+   - Ranked Domain Name (domain.com, www.domain.com, subdomain.domain.com, etc...)
    - Ranked Page URL (https://www.domain.com/page-url, subdomain.domain.com/page-url, etc...)
 3. Enter any designated domains you want to be returned, separated by commas.
 4. The tool will process the data and display the top 20 domains by estimated traffic, traffic for designated domains, and top 3 pages for the top 20 domains.
