@@ -13,17 +13,43 @@ ctr_curve = {
 
 # Function to estimate traffic based on position
 def estimate_traffic(position, search_volume):
+    if pd.isna(position) or pd.isna(search_volume):
+        return 0
+    position = int(position)
+    search_volume = int(search_volume)
     if position in ctr_curve:
         return round((ctr_curve[position] / 100) * search_volume)
     return 0
+
+# Function to clean and preprocess data
+def clean_data(df):
+    # Replace '-', 'N/A', and empty strings with NaN
+    df = df.replace(['-', 'N/A', ''], np.nan)
+    
+    # Drop rows where all required columns are NaN
+    required_columns = ['Keywords', 'Keyword Ranking', 'Search Volume', 'Ranked Domain Name', 'Ranked Page URL']
+    df = df.dropna(subset=required_columns, how='all')
+    
+    # Convert 'Keyword Ranking' and 'Search Volume' to numeric, coercing errors to NaN
+    df['Keyword Ranking'] = pd.to_numeric(df['Keyword Ranking'], errors='coerce')
+    df['Search Volume'] = pd.to_numeric(df['Search Volume'], errors='coerce')
+    
+    # Filter out rows with invalid rankings or search volumes
+    df = df[(df['Keyword Ranking'] >= 1) & (df['Keyword Ranking'] <= 100) & (df['Search Volume'] > 0)]
+    
+    # Fill remaining NaNs with appropriate values
+    df['Ranked Domain Name'] = df['Ranked Domain Name'].fillna('Unknown')
+    df['Ranked Page URL'] = df['Ranked Page URL'].fillna('')
+    
+    return df
 
 # Function to process the uploaded file
 def process_file(uploaded_file, designated_domains):
     # Read the uploaded Excel file
     df = pd.read_excel(uploaded_file)
 
-    # Ensure missing values are handled
-    df.fillna('', inplace=True)
+    # Clean and preprocess the data
+    df = clean_data(df)
 
     # Estimate traffic for each row
     df['Estimated Traffic'] = df.apply(
