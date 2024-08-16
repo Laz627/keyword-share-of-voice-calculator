@@ -14,6 +14,8 @@ ctr_curve = {
 }
 
 def normalize_domain(domain):
+    if domain == 'Unknown_Domain':
+        return domain
     # Remove protocol if present
     domain = re.sub(r'^https?://', '', domain)
     
@@ -55,7 +57,7 @@ def clean_data(df):
     df = df[(df['Keyword Ranking'] >= 1) & (df['Keyword Ranking'] <= 100) & (df['Search Volume'] > 0)]
     
     # Fill remaining NaNs with appropriate values
-    df['Ranked Domain Name'] = df['Ranked Domain Name'].fillna('Unknown')
+    df['Ranked Domain Name'] = df['Ranked Domain Name'].fillna('Unknown_Domain')
     df['Ranked Page URL'] = df['Ranked Page URL'].fillna('')
     
     # Normalize domain names
@@ -84,6 +86,9 @@ def process_file(uploaded_file, designated_domains):
         {'Estimated Traffic': 'sum', 'Search Volume': 'sum'}
     ).reset_index()
     domain_traffic.columns = ['Domain', 'Total Estimated Traffic', 'Total Search Volume']
+
+    # Filter out "Unknown" domains
+    domain_traffic = domain_traffic[domain_traffic['Domain'] != 'Unknown_Domain']
 
     # Sort by estimated traffic and then by search volume if estimated traffic is zero
     domain_traffic = domain_traffic.sort_values(
@@ -119,6 +124,9 @@ def process_file(uploaded_file, designated_domains):
 
     # Rename columns
     top_pages.columns = ['Domain', 'Page URL', 'Total Search Volume', 'Total Estimated Traffic']
+
+    # Filter out "Unknown" domains from top_pages
+    top_pages = top_pages[top_pages['Domain'] != 'Unknown_Domain']
 
     # Convert columns to appropriate types
     top_pages = top_pages.astype({'Total Search Volume': 'int', 'Total Estimated Traffic': 'int'})
@@ -214,7 +222,7 @@ st.write('''
    - Keywords
    - Keyword Rankings (1-100)
    - Keyword Search Volume
-   - Ranked Domain Name (domain.com, www.domain.com, subdomain.domain.com, etc...)
+   - Ranked Domain Name (domain.com, subdomain.domain.com, www.domain.com, etc...)
    - Ranked Page URL (https://www.domain.com/page-url, subdomain.domain.com/page-url, etc...)
 3. Enter any designated domains you want to be returned, separated by commas.
 4. The tool will process the data and display the top 20 domains by estimated traffic, traffic for designated domains, and top 3 pages for the top 20 domains.
