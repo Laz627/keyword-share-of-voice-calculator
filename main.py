@@ -141,19 +141,37 @@ if uploaded_file:
         
         with tabs[0]: # Dashboard
             st.header("Visualizations Dashboard")
-            st.info("High-level overview of the competitive landscape.")
             
-            st.subheader("Share of Voice Bubble Chart")
-            if not top_domains.empty and 'Number of Keywords' in top_domains.columns:
-                fig_bubble = px.scatter(
-                    top_domains, x='Total Estimated Traffic', y='Number of Keywords',
-                    size='SOV_Percentage', color='Domain', hover_name='Domain',
-                    text='Domain', log_x=True, size_max=70, title="Top 20: Traffic vs. Keyword Count vs. SOV")
-                fig_bubble.update_traces(textposition='top center')
-                fig_bubble.update_layout(xaxis_title="Total Estimated Traffic (Log Scale)", yaxis_title="Number of Keywords", showlegend=False)
-                st.plotly_chart(fig_bubble, use_container_width=True)
-            else:
-                st.warning("Bubble chart requires the 'Keywords' column to be present in your file.")
+            st.subheader("Share of Voice Landscape")
+            st.info("Hover over the legend on the right to highlight a domain in the chart.")
+
+            # Create a two-column layout: 2/3 for the chart, 1/3 for the legend
+            col1, col2 = st.columns([2, 1])
+
+            with col1:
+                if not top_domains.empty and 'Number of Keywords' in top_domains.columns:
+                    fig_bubble = px.scatter(
+                        top_domains, x='Total Estimated Traffic', y='Number of Keywords',
+                        size='SOV_Percentage', color='Domain', hover_name='Domain',
+                        text='Rank', # Label bubbles with their rank number
+                        log_x=True, size_max=80)
+                    
+                    fig_bubble.update_traces(textposition='middle center', textfont_size=12)
+                    fig_bubble.update_layout(
+                        xaxis_title="Total Estimated Traffic (Log Scale)",
+                        yaxis_title="Number of Keywords",
+                        showlegend=False, # Hide the default legend
+                        title="Top 20 Domains: Traffic vs. Keyword Count vs. SOV"
+                    )
+                    st.plotly_chart(fig_bubble, use_container_width=True)
+                else:
+                    st.warning("Bubble chart requires the 'Keywords' column to be present.")
+
+            with col2:
+                st.write("#### Top 20 Domains Legend")
+                # Display a clean, numbered legend table
+                legend_df = top_domains[['Rank', 'Domain']].set_index('Rank')
+                st.dataframe(legend_df, use_container_width=True)
             
             st.subheader('Top 20 Domains by Performance')
             if not top_domains.empty:
@@ -161,9 +179,10 @@ if uploaded_file:
                 if 'Number of Keywords' in top_domains.columns:
                     chart_cols.append('Number of Keywords')
                 
+                # Use Plotly Bar chart for strict sorting
                 fig_bar = px.bar(top_domains, x='Domain', y=chart_cols, title='Domain Performance Sorted by Traffic',
                                  labels={'value': 'Total Count', 'variable': 'Metric'})
-                fig_bar.update_xaxes(type='category')
+                fig_bar.update_xaxes(type='category') # Ensures order is respected
                 st.plotly_chart(fig_bar, use_container_width=True)
 
         with tabs[1]: # Detailed Data
