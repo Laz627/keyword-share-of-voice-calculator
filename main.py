@@ -38,43 +38,47 @@ def estimate_traffic(position, search_volume):
 # Caching decorator to improve performance on re-runs
 @st.cache_data
 def process_file(uploaded_file_contents, designated_domains_tuple):
-    """
-    Processes the uploaded file contents to calculate SOV and other metrics.
-    Note: We pass file contents and a tuple to ensure the inputs are hashable for caching.
-    """
     df = pd.read_excel(io.BytesIO(uploaded_file_contents))
 
-    # --- Data Cleaning ---
-    df = df.replace(['-', 'N/A', ''], np.nan)
-    required_columns = ['Keywords', 'Keyword Ranking', 'Search Volume', 'Ranked Domain Name', 'Ranked Page URL']
-    existing_required_columns = [col for col in required_columns if col in df.columns]
-    if not any(col in existing_required_columns for col in ['Keyword Ranking', 'Search Volume', 'Ranked Domain Name']):
-        st.error("The file is missing critical columns. It must contain 'Keyword Ranking', 'Search Volume', and 'Ranked Domain Name'.")
+    # --- ROBUSTNESS FIX: Normalize column names ---
+    # Strip leading/trailing whitespace from all column headers
+    df.columns = df.columns.str.strip()
+    st.info(f"**Columns found in file:** {', '.join(df.columns)}") # Diagnostic message
+    # --- END FIX ---
+
+    # --- Data Cleaning & Validation ---
+    required_cols_for_processing = ['Keyword Ranking', 'Search Volume', 'Ranked Domain Name']
+    missing_cols = [col for col in required_cols_for_processing if col not in df.columns]
+    if missing_cols:
+        st.error(f"Critical columns are missing from your file: **{', '.join(missing_cols)}**. Please check the spelling and ensure they exist in your uploaded file.")
         return None, None, None, None
 
-    df = df.dropna(subset=existing_required_columns, how='all')
+    df = df.replace(['-', 'N/A', ''], np.nan)
+    df = df.dropna(subset=required_cols_for_processing, how='any')
 
-    if 'Keyword Ranking' in df.columns:
-        df['Keyword Ranking'] = pd.to_numeric(df['Keyword Ranking'], errors='coerce')
-    if 'Search Volume' in df.columns:
-        df['Search Volume'] = pd.to_numeric(df['Search Volume'], errors='coerce')
-    
+    df['Keyword Ranking'] = pd.to_numeric(df['Keyword Ranking'], errors='coerce')
+    df['Search Volume'] = pd.to_numeric(df['Search Volume'], errors='coerce')
     df = df.dropna(subset=['Keyword Ranking', 'Search Volume'])
     df = df[(df['Keyword Ranking'] >= 1) & (df['Keyword Ranking'] <= 100) & (df['Search Volume'] > 0)]
 
-    df['Ranked Domain Name'] = df['Ranked Domain Name'].fillna('Unknown_Domain').apply(normalize_domain)
+    df['Ranked Domain Name'] = df['Ranked Domain Name'].apply(normalize_domain)
     if 'Ranked Page URL' in df.columns:
         df['Ranked Page URL'] = df['Ranked Page URL'].fillna('')
     
     # --- Data Processing ---
     df['Estimated Traffic'] = df.apply(lambda row: estimate_traffic(row['Keyword Ranking'], row['Search Volume']), axis=1)
     
-    agg_dict = {'Estimated Traffic': 'sum', 'Search Volume': 'sum'}
+    # Dynamic Aggregation based on available columns
+    domain_aggs = {
+        'Total Estimated Traffic': pd.NamedAgg(column='Estimated Traffic', aggfunc='sum'),
+        'Total Search Volume': pd.NamedAgg(column='Search Volume', aggfunc='sum')
+    }
     if 'Keywords' in df.columns:
-        agg_dict['Number of Keywords'] = pd.NamedAgg(column='Keywords', aggfunc='nunique')
+        domain_aggs['Number of Keywords'] = pd.NamedAgg(column='Keywords', aggfunc='nunique')
+
+    domain_traffic = df.groupby('Ranked Domain Name').agg(**domain_aggs).reset_index()
+    domain_traffic.rename(columns={'Ranked Domain Name': 'Domain'}, inplace=True)
     
-    domain_traffic = df.groupby('Ranked Domain Name').agg(**agg_dict).reset_index()
-    domain_traffic.rename(columns={'Estimated Traffic': 'Total Estimated Traffic', 'Search Volume': 'Total Search Volume'}, inplace=True)
     domain_traffic = domain_traffic[domain_traffic['Domain'] != 'Unknown_Domain']
 
     total_traffic_for_sov = domain_traffic['Total Estimated Traffic'].sum()
@@ -90,15 +94,15 @@ def process_file(uploaded_file_contents, designated_domains_tuple):
 
     top_pages = pd.DataFrame()
     if 'Ranked Page URL' in df.columns and not df.empty:
-        top_pages_df = df[df['Ranked Domain Name'].isin(top_domains['Domain']) & (df['Ranked Page URL'] != '')]
+        top_pages_df = df[df['Ranked Domain Name'].isin(top_domains['Domain']) & (df['Ranked Page URL'] != '')].copy()
         if not top_pages_df.empty:
-            top_pages = top_pages_df.groupby(['Ranked Domain Name', 'Ranked Page URL']).agg(
-                {'Search Volume': 'sum', 'Estimated Traffic': 'sum'}
-            ).reset_index()
-            top_pages.columns = ['Domain', 'Page URL', 'Total Search Volume', 'Total Estimated Traffic']
-            top_pages = top_pages.sort_values(by=['Domain', 'Total Estimated Traffic'], ascending=[True, False])
-            top_pages = top_pages.groupby('Domain').head(3).reset_index(drop=True)
-            top_pages = top_pages.sort_values(by='Total Estimated Traffic', ascending=False)
+            page_aggs = {
+                'Total Estimated Traffic': pd.NamedAgg(column='Estimated Traffic', aggfunc='sum'),
+                'Total Search Volume': pd.NamedAgg(column='Search Volume', aggfunc='sum')
+            }
+            top_pages = top_pages_df.groupby(['Ranked Domain Name', 'Ranked Page URL']).agg(**page_aggs).reset_index()
+            top_pages.rename(columns={'Ranked Domain Name': 'Domain', 'Ranked Page URL': 'Page URL'}, inplace=True)
+            top_pages = top_pages.sort_values(by='Total Estimated Traffic', ascending=False).reset_index(drop=True)
 
     return top_domains, designated_domains_traffic, top_pages, domain_traffic
 
@@ -119,16 +123,14 @@ st.set_page_config(layout="wide")
 st.title('Share of Voice (SOV) Analysis Dashboard')
 st.write('### Created by: Brandon Lazovic')
 
-# --- Sidebar for Instructions and Upload ---
 st.sidebar.header('Setup & Instructions')
 st.sidebar.info('''
 1.  **Download** the sample template to see the required format.
-2.  **Fill** it with your data from any SEO tool.
+2.  **Fill** it with your data. Column names must match the template (though extra spaces will be handled).
 3.  **Upload** your completed Excel file below.
 4.  **Enter** specific domains to track, separated by commas.
 5.  **Analyze** the results in the tabs.
 ''')
-
 st.sidebar.header('Download Template')
 st.sidebar.download_button(label='Download Sample Template', data=create_sample_template(), file_name='sample_template.xlsx')
 
@@ -136,29 +138,23 @@ st.header('Upload & Configuration')
 uploaded_file = st.file_uploader("Upload your keyword data Excel file", type=["xlsx"])
 designated_domains_input = st.text_input("Enter designated domains to track (comma-separated)", value="")
 
-# --- Main App Logic ---
 if uploaded_file:
-    designated_domains = [domain.strip() for domain in designated_domains_input.split(",") if domain.strip()]
-    # Convert list to tuple for caching
-    designated_domains_tuple = tuple(designated_domains)
+    designated_domains_tuple = tuple(domain.strip() for domain in designated_domains_input.split(",") if domain.strip())
     
     with st.spinner('Processing... This may take a moment.'):
-        # Pass file contents to the cached function
         file_contents = uploaded_file.getvalue()
         top_domains, designated_domains_traffic, top_pages, full_domain_list = process_file(file_contents, designated_domains_tuple)
 
     if top_domains is not None:
         st.success('Processing complete!')
 
-        # --- Tabbed Layout ---
         tab_dashboard, tab_data, tab_downloads = st.tabs(["📊 Dashboard", "📄 Detailed Data", "📥 Downloads"])
 
         with tab_dashboard:
             st.header("Visualizations Dashboard")
-            st.info("This dashboard provides a high-level overview of the competitive landscape.")
-
+            st.info("High-level overview of the competitive landscape.")
             st.subheader("Share of Voice Bubble Chart")
-            if not top_domains.empty and 'SOV_Percentage' in top_domains.columns and 'Number of Keywords' in top_domains.columns:
+            if not top_domains.empty and 'Number of Keywords' in top_domains.columns:
                 fig_bubble = px.scatter(
                     top_domains, x='Total Estimated Traffic', y='Number of Keywords',
                     size='SOV_Percentage', color='Domain', hover_name='Domain',
@@ -166,8 +162,8 @@ if uploaded_file:
                 fig_bubble.update_layout(xaxis_title="Total Estimated Traffic (Log Scale)", yaxis_title="Number of Keywords", showlegend=False)
                 st.plotly_chart(fig_bubble, use_container_width=True)
             else:
-                st.write("Bubble chart requires 'Keywords' column to be present in the uploaded file.")
-
+                st.warning("Bubble chart requires the 'Keywords' column to be present in your file.")
+            
             st.subheader('Top 20 Domains by Estimated Traffic & Keyword Count')
             if not top_domains.empty:
                 chart_cols = ['Total Estimated Traffic']
@@ -175,36 +171,23 @@ if uploaded_file:
                     chart_cols.append('Number of Keywords')
                 chart_data = top_domains.set_index('Domain')[chart_cols]
                 st.bar_chart(chart_data)
-            else:
-                st.write("No data available for Top 20 domains.")
 
         with tab_data:
             st.header("Detailed Data Tables")
-
             st.subheader('Top 20 Domains Data')
             if not top_domains.empty:
-                display_df = top_domains.copy()
-                display_df['SOV_Percentage'] = display_df['SOV_Percentage'].map('{:.2f}%'.format)
-                st.dataframe(display_df)
-            else:
-                st.write("No data for Top 20 domains.")
-
+                st.dataframe(top_domains)
+            
             st.subheader('Designated Domains Traffic')
             if not designated_domains_traffic.empty:
                 st.dataframe(designated_domains_traffic)
-            else:
-                st.write("No designated domains specified or they were not found in the data.")
             
-            st.subheader('Top Performing Pages for Top 20 Domains')
-            st.info("Top 3 pages per domain, sorted by the highest traffic overall.")
+            st.subheader('Top Performing Pages')
             if not top_pages.empty:
                 st.dataframe(top_pages)
-            else:
-                st.write("No top pages found. Ensure 'Ranked Page URL' column is present.")
 
         with tab_downloads:
             st.header("Download Full Datasets")
-            
             def to_excel(df):
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -217,5 +200,5 @@ if uploaded_file:
                  st.download_button(label='Download Designated Domains', data=to_excel(designated_domains_traffic), file_name='designated_domains_traffic.xlsx')
             if not top_pages.empty:
                  st.download_button(label='Download Top Pages', data=to_excel(top_pages), file_name='top_pages.xlsx')
-            if not full_domain_list.empty:
+            if full_domain_list is not None and not full_domain_list.empty:
                  st.download_button(label='Download Full Domain List', data=to_excel(full_domain_list), file_name='full_domain_list.xlsx')
