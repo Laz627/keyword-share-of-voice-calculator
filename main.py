@@ -134,19 +134,18 @@ if uploaded_file:
                         top_domains, x='Total Estimated Traffic', y='Number of Keywords',
                         size='SOV_Percentage', color='Domain', text='Rank',
                         log_x=True, size_max=80,
-                        labels={ # Custom labels for axes and hover
-                            "Total Estimated Traffic": "Est. Traffic",
-                            "Number of Keywords": "# of Keywords",
-                            "SOV_Percentage": "Share of Voice"
-                        },
-                        hover_name='Domain',
-                        hover_data={ # Custom formatting for hover data
-                            'Domain': False, # Hide domain since it's in the hover_name
-                            'Total Estimated Traffic': ':,', # Add comma separator
-                            'Number of Keywords': ':,',
-                            'SOV_Percentage': ':.2f%' # Format as percentage
-                        })
-                    fig_bubble.update_traces(textposition='middle center', textfont_size=12)
+                        custom_data=['Domain', 'Total Estimated Traffic', 'Number of Keywords', 'SOV_Percentage']
+                    )
+                    fig_bubble.update_traces(
+                        textposition='middle center', textfont_size=12,
+                        hovertemplate=(
+                            "<b>%{customdata[0]}</b><br><br>"
+                            "Est. Traffic: %{customdata[1]:,}<br>"
+                            "# of Keywords: %{customdata[2]:,}<br>"
+                            "Share of Voice: %{customdata[3]:.2f}%"
+                            "<extra></extra>"
+                        )
+                    )
                     fig_bubble.update_layout(xaxis_title="Total Estimated Traffic (Log Scale)", yaxis_title="Number of Keywords", showlegend=False)
                     st.plotly_chart(fig_bubble, use_container_width=True)
                 else:
@@ -161,12 +160,12 @@ if uploaded_file:
                 fig_bar = px.bar(top_domains, x='Domain', y=chart_cols, title='Domain Performance Sorted by Traffic',
                                  labels={"value": "Total Count", "variable": "Metric"})
                 fig_bar.update_xaxes(type='category')
-                fig_bar.update_traces(hovertemplate='%{y:,}<extra></extra>') # Add comma formatting to hover
+                fig_bar.update_traces(hovertemplate='%{y:,}<extra></extra>')
                 st.plotly_chart(fig_bar, use_container_width=True)
 
             # --- Designated Domains View ---
             if not designated_traffic.empty:
-                st.markdown("---") # Visual separator
+                st.markdown("---")
                 st.header("Designated Domain Analysis")
                 st.info("A focused view on the competitive cohort you specified.")
 
@@ -178,19 +177,18 @@ if uploaded_file:
                             designated_traffic, x='Total Estimated Traffic', y='Number of Keywords',
                             size='SOV_Percentage', color='Domain', text='Rank',
                             log_x=True, size_max=80,
-                            labels={
-                                "Total Estimated Traffic": "Est. Traffic",
-                                "Number of Keywords": "# of Keywords",
-                                "SOV_Percentage": "Share of Voice"
-                            },
-                            hover_name='Domain',
-                            hover_data={
-                                'Domain': False,
-                                'Total Estimated Traffic': ':,',
-                                'Number of Keywords': ':,',
-                                'SOV_Percentage': ':.2f%'
-                            })
-                        fig_bubble_des.update_traces(textposition='middle center', textfont_size=12)
+                            custom_data=['Domain', 'Total Estimated Traffic', 'Number of Keywords', 'SOV_Percentage']
+                        )
+                        fig_bubble_des.update_traces(
+                            textposition='middle center', textfont_size=12,
+                            hovertemplate=(
+                                "<b>%{customdata[0]}</b><br><br>"
+                                "Est. Traffic: %{customdata[1]:,}<br>"
+                                "# of Keywords: %{customdata[2]:,}<br>"
+                                "Share of Voice: %{customdata[3]:.2f}%"
+                                "<extra></extra>"
+                            )
+                        )
                         fig_bubble_des.update_layout(xaxis_title="Total Estimated Traffic (Log Scale)", yaxis_title="Number of Keywords", showlegend=False)
                         st.plotly_chart(fig_bubble_des, use_container_width=True)
                     else:
