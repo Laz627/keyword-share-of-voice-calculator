@@ -35,40 +35,33 @@ def estimate_traffic(position, search_volume):
         return round((ctr_curve[position] / 100) * search_volume)
     return 0
 
-# Caching decorator to improve performance on re-runs
 @st.cache_data
 def process_file(uploaded_file_contents, designated_domains_tuple):
     df = pd.read_excel(io.BytesIO(uploaded_file_contents))
 
-    # Normalize column names for robustness
     df.columns = df.columns.str.strip()
-    st.info(f"**Columns found in file:** {', '.join(df.columns)}")
+    st.info(f"**Columns found:** {', '.join(df.columns)}")
 
-    # Validate critical columns
     required_cols = ['Keyword Ranking', 'Search Volume', 'Ranked Domain Name']
     missing_cols = [col for col in required_cols if col not in df.columns]
     if missing_cols:
-        st.error(f"Critical columns are missing: **{', '.join(missing_cols)}**. Please check your file.")
-        return None, None, None, None
+        st.error(f"Critical columns missing: **{', '.join(missing_cols)}**.")
+        return None, None, None
 
-    # Data Cleaning
     df = df.replace(['-', 'N/A', ''], np.nan).dropna(subset=required_cols)
-    df['Keyword Ranking'] = pd.to_numeric(df['Keyword Ranking'], errors='coerce')
-    df['Search Volume'] = pd.to_numeric(df['Search Volume'], errors='coerce')
-    df = df.dropna(subset=['Keyword Ranking', 'Search Volume'])
+    for col in ['Keyword Ranking', 'Search Volume']:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    df.dropna(subset=['Keyword Ranking', 'Search Volume'], inplace=True)
     df = df[(df['Keyword Ranking'] >= 1) & (df['Keyword Ranking'] <= 100) & (df['Search Volume'] > 0)]
     df['Ranked Domain Name'] = df['Ranked Domain Name'].apply(normalize_domain)
-    if 'Ranked Page URL' in df.columns:
-        df['Ranked Page URL'] = df['Ranked Page URL'].fillna('')
     
-    # Data Processing
     df['Estimated Traffic'] = df.apply(lambda row: estimate_traffic(row['Keyword Ranking'], row['Search Volume']), axis=1)
     
-    aggs = {'Total Estimated Traffic': pd.NamedAgg(column='Estimated Traffic', aggfunc='sum')}
+    aggs = {'Total Estimated Traffic': ('Estimated Traffic', 'sum')}
     if 'Search Volume' in df.columns:
-        aggs['Total Search Volume'] = pd.NamedAgg(column='Search Volume', aggfunc='sum')
+        aggs['Total Search Volume'] = ('Search Volume', 'sum')
     if 'Keywords' in df.columns:
-        aggs['Number of Keywords'] = pd.NamedAgg(column='Keywords', aggfunc='nunique')
+        aggs['Number of Keywords'] = ('Keywords', 'nunique')
 
     domain_traffic = df.groupby('Ranked Domain Name').agg(**aggs).reset_index()
     domain_traffic.rename(columns={'Ranked Domain Name': 'Domain'}, inplace=True)
@@ -82,18 +75,7 @@ def process_file(uploaded_file_contents, designated_domains_tuple):
     top_domains = domain_traffic.head(20)
     designated_traffic = domain_traffic[domain_traffic['Domain'].isin(list(designated_domains_tuple))]
 
-    top_pages = pd.DataFrame()
-    if 'Ranked Page URL' in df.columns and 'Ranked Domain Name' in df.columns:
-        top_pages_df = df[df['Ranked Domain Name'].isin(top_domains['Domain']) & (df['Ranked Page URL'] != '')].copy()
-        if not top_pages_df.empty:
-            page_aggs = {'Total Estimated Traffic': pd.NamedAgg(column='Estimated Traffic', aggfunc='sum')}
-            if 'Search Volume' in df.columns:
-                page_aggs['Total Search Volume'] = pd.NamedAgg(column='Search Volume', aggfunc='sum')
-            top_pages = top_pages_df.groupby(['Ranked Domain Name', 'Ranked Page URL']).agg(**page_aggs).reset_index()
-            top_pages.rename(columns={'Ranked Domain Name': 'Domain', 'Ranked Page URL': 'Page URL'}, inplace=True)
-            top_pages = top_pages.sort_values(by='Total Estimated Traffic', ascending=False).reset_index(drop=True)
-
-    return top_domains, designated_traffic, top_pages, domain_traffic
+    return top_domains, designated_traffic, domain_traffic
 
 def create_sample_template():
     sample_data = {
@@ -115,9 +97,9 @@ st.write('### Created by: Brandon Lazovic')
 st.sidebar.header('Setup & Instructions')
 st.sidebar.info('''
 1.  **Download** the sample template.
-2.  **Fill** it with your data. Column names must match the template.
-3.  **Upload** your completed Excel file below.
-4.  **Enter** domains to track (optional).
+2.  **Fill** it with your keyword data.
+3.  **Upload** your Excel file below.
+4.  **Enter** domains to analyze a specific cohort.
 5.  **Analyze** the dashboard results.
 ''')
 st.sidebar.header('Download Template')
@@ -128,75 +110,83 @@ uploaded_file = st.file_uploader("Upload your keyword data Excel file", type=["x
 designated_domains_input = st.text_input("Enter designated domains to track (comma-separated)", value="")
 
 if uploaded_file:
-    designated_tuple = tuple(d.strip() for d in designated_domains_input.split(",") if d.strip())
+    designated_tuple = tuple(normalize_domain(d.strip()) for d in designated_domains_input.split(",") if d.strip())
     
     with st.spinner('Processing...'):
         file_contents = uploaded_file.getvalue()
-        top_domains, designated_traffic, top_pages, full_list = process_file(file_contents, designated_tuple)
+        top_domains, designated_traffic, full_list = process_file(file_contents, designated_tuple)
 
     if top_domains is not None:
         st.success('Processing complete!')
 
         tabs = st.tabs(["📊 Dashboard", "📄 Detailed Data", "📥 Downloads"])
         
-        with tabs[0]: # Dashboard
+        with tabs[0]:
             st.header("Visualizations Dashboard")
-            
-            st.subheader("Share of Voice Landscape")
-            st.info("Hover over the legend on the right to highlight a domain in the chart.")
 
-            # Create a two-column layout: 2/3 for the chart, 1/3 for the legend
+            # --- Top 20 Market View ---
+            st.subheader("Top 20 Market Landscape")
+            st.info("Hover over the legend to highlight a domain in the chart.")
             col1, col2 = st.columns([2, 1])
-
             with col1:
                 if not top_domains.empty and 'Number of Keywords' in top_domains.columns:
                     fig_bubble = px.scatter(
                         top_domains, x='Total Estimated Traffic', y='Number of Keywords',
-                        size='SOV_Percentage', color='Domain', hover_name='Domain',
-                        text='Rank', # Label bubbles with their rank number
+                        size='SOV_Percentage', color='Domain', hover_name='Domain', text='Rank',
                         log_x=True, size_max=80)
-                    
                     fig_bubble.update_traces(textposition='middle center', textfont_size=12)
-                    fig_bubble.update_layout(
-                        xaxis_title="Total Estimated Traffic (Log Scale)",
-                        yaxis_title="Number of Keywords",
-                        showlegend=False, # Hide the default legend
-                        title="Top 20 Domains: Traffic vs. Keyword Count vs. SOV"
-                    )
+                    fig_bubble.update_layout(xaxis_title="Total Estimated Traffic (Log Scale)", yaxis_title="Number of Keywords", showlegend=False)
                     st.plotly_chart(fig_bubble, use_container_width=True)
                 else:
-                    st.warning("Bubble chart requires the 'Keywords' column to be present.")
-
+                    st.warning("Bubble chart requires the 'Keywords' column.")
             with col2:
-                st.write("#### Top 20 Domains Legend")
-                # Display a clean, numbered legend table
-                legend_df = top_domains[['Rank', 'Domain']].set_index('Rank')
-                st.dataframe(legend_df, use_container_width=True)
+                st.write("#### Top 20 Legend")
+                st.dataframe(top_domains[['Rank', 'Domain']].set_index('Rank'), use_container_width=True)
             
             st.subheader('Top 20 Domains by Performance')
             if not top_domains.empty:
-                chart_cols = ['Total Estimated Traffic']
-                if 'Number of Keywords' in top_domains.columns:
-                    chart_cols.append('Number of Keywords')
-                
-                # Use Plotly Bar chart for strict sorting
-                fig_bar = px.bar(top_domains, x='Domain', y=chart_cols, title='Domain Performance Sorted by Traffic',
-                                 labels={'value': 'Total Count', 'variable': 'Metric'})
-                fig_bar.update_xaxes(type='category') # Ensures order is respected
+                chart_cols = ['Total Estimated Traffic'] + (['Number of Keywords'] if 'Number of Keywords' in top_domains.columns else [])
+                fig_bar = px.bar(top_domains, x='Domain', y=chart_cols, title='Domain Performance Sorted by Traffic')
+                fig_bar.update_xaxes(type='category')
                 st.plotly_chart(fig_bar, use_container_width=True)
 
-        with tabs[1]: # Detailed Data
+            # --- Designated Domains View ---
+            if not designated_traffic.empty:
+                st.markdown("---") # Visual separator
+                st.header("Designated Domain Analysis")
+                st.info("A focused view on the competitive cohort you specified.")
+
+                st.subheader("Designated Domain Landscape")
+                col3, col4 = st.columns([2, 1])
+                with col3:
+                    if 'Number of Keywords' in designated_traffic.columns:
+                        fig_bubble_des = px.scatter(
+                            designated_traffic, x='Total Estimated Traffic', y='Number of Keywords',
+                            size='SOV_Percentage', color='Domain', hover_name='Domain', text='Rank',
+                            log_x=True, size_max=80)
+                        fig_bubble_des.update_traces(textposition='middle center', textfont_size=12)
+                        fig_bubble_des.update_layout(xaxis_title="Total Estimated Traffic (Log Scale)", yaxis_title="Number of Keywords", showlegend=False)
+                        st.plotly_chart(fig_bubble_des, use_container_width=True)
+                    else:
+                        st.warning("Bubble chart requires the 'Keywords' column.")
+                with col4:
+                    st.write("#### Designated Legend")
+                    st.dataframe(designated_traffic[['Rank', 'Domain']].set_index('Rank'), use_container_width=True)
+
+                st.subheader('Designated Domains by Performance')
+                chart_cols_des = ['Total Estimated Traffic'] + (['Number of Keywords'] if 'Number of Keywords' in designated_traffic.columns else [])
+                fig_bar_des = px.bar(designated_traffic, x='Domain', y=chart_cols_des, title='Designated Domain Performance Sorted by Traffic')
+                fig_bar_des.update_xaxes(type='category')
+                st.plotly_chart(fig_bar_des, use_container_width=True)
+
+        with tabs[1]:
             st.header("Detailed Data Tables")
             st.subheader('Top 20 Domains Data')
             if not top_domains.empty: st.dataframe(top_domains)
-            
             st.subheader('Designated Domains Traffic')
             if not designated_traffic.empty: st.dataframe(designated_traffic)
-            
-            st.subheader('Top Performing Pages')
-            if not top_pages.empty: st.dataframe(top_pages)
 
-        with tabs[2]: # Downloads
+        with tabs[2]:
             st.header("Download Full Datasets")
             def to_excel(df):
                 output = io.BytesIO()
@@ -208,7 +198,5 @@ if uploaded_file:
                  st.download_button("Download Top 20 Domains", to_excel(top_domains), "top_20_domains.xlsx")
             if not designated_traffic.empty:
                  st.download_button("Download Designated Domains", to_excel(designated_traffic), "designated_domains.xlsx")
-            if not top_pages.empty:
-                 st.download_button("Download Top Pages", to_excel(top_pages), "top_pages.xlsx")
             if full_list is not None and not full_list.empty:
                  st.download_button("Download Full Domain List", to_excel(full_list), "full_domain_list.xlsx")
