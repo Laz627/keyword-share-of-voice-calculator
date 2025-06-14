@@ -47,28 +47,45 @@ def clean_data(df):
     
     # Drop rows where all required columns are NaN
     required_columns = ['Keywords', 'Keyword Ranking', 'Search Volume', 'Ranked Domain Name', 'Ranked Page URL']
-    df = df.dropna(subset=required_columns, how='all')
+    
+    # Bug fix: Ensure all required columns exist before dropping NA values
+    existing_required_columns = [col for col in required_columns if col in df.columns]
+    if not existing_required_columns:
+        st.error(f"The uploaded file must contain at least one of the following columns: {', '.join(required_columns)}")
+        st.stop()
+        
+    df = df.dropna(subset=existing_required_columns, how='all')
     
     # Convert 'Keyword Ranking' and 'Search Volume' to numeric, coercing errors to NaN
-    df['Keyword Ranking'] = pd.to_numeric(df['Keyword Ranking'], errors='coerce')
-    df['Search Volume'] = pd.to_numeric(df['Search Volume'], errors='coerce')
+    if 'Keyword Ranking' in df.columns:
+        df['Keyword Ranking'] = pd.to_numeric(df['Keyword Ranking'], errors='coerce')
+    if 'Search Volume' in df.columns:
+        df['Search Volume'] = pd.to_numeric(df['Search Volume'], errors='coerce')
     
     # Filter out rows with invalid rankings or search volumes
-    df = df[(df['Keyword Ranking'] >= 1) & (df['Keyword Ranking'] <= 100) & (df['Search Volume'] > 0)]
+    if 'Keyword Ranking' in df.columns and 'Search Volume' in df.columns:
+        df = df[(df['Keyword Ranking'] >= 1) & (df['Keyword Ranking'] <= 100) & (df['Search Volume'] > 0)]
     
     # Fill remaining NaNs with appropriate values
-    df['Ranked Domain Name'] = df['Ranked Domain Name'].fillna('Unknown_Domain')
-    df['Ranked Page URL'] = df['Ranked Page URL'].fillna('')
+    if 'Ranked Domain Name' in df.columns:
+        df['Ranked Domain Name'] = df['Ranked Domain Name'].fillna('Unknown_Domain')
+    if 'Ranked Page URL' in df.columns:
+        df['Ranked Page URL'] = df['Ranked Page URL'].fillna('')
     
     # Normalize domain names
-    df['Ranked Domain Name'] = df['Ranked Domain Name'].apply(normalize_domain)
+    if 'Ranked Domain Name' in df.columns:
+        df['Ranked Domain Name'] = df['Ranked Domain Name'].apply(normalize_domain)
     
     return df
 
 # Function to process the uploaded file
 def process_file(uploaded_file, designated_domains):
     # Read the uploaded Excel file
-    df = pd.read_excel(uploaded_file)
+    try:
+        df = pd.read_excel(uploaded_file)
+    except Exception as e:
+        st.error(f"Error reading the Excel file: {e}")
+        st.stop()
 
     # Clean and preprocess the data
     df = clean_data(df)
@@ -77,15 +94,22 @@ def process_file(uploaded_file, designated_domains):
     designated_domains = [normalize_domain(domain) for domain in designated_domains]
 
     # Estimate traffic for each row
-    df['Estimated Traffic'] = df.apply(
-        lambda row: estimate_traffic(row['Keyword Ranking'], row['Search Volume']), axis=1
-    )
+    if 'Keyword Ranking' in df.columns and 'Search Volume' in df.columns:
+        df['Estimated Traffic'] = df.apply(
+            lambda row: estimate_traffic(row['Keyword Ranking'], row['Search Volume']), axis=1
+        )
+    else:
+        df['Estimated Traffic'] = 0
 
     # Aggregate traffic by domain
-    domain_traffic = df.groupby('Ranked Domain Name').agg(
-        {'Estimated Traffic': 'sum', 'Search Volume': 'sum'}
-    ).reset_index()
-    domain_traffic.columns = ['Domain', 'Total Estimated Traffic', 'Total Search Volume']
+    if 'Ranked Domain Name' in df.columns:
+        domain_traffic = df.groupby('Ranked Domain Name').agg(
+            {'Estimated Traffic': 'sum', 'Search Volume': 'sum'}
+        ).reset_index()
+        domain_traffic.columns = ['Domain', 'Total Estimated Traffic', 'Total Search Volume']
+    else:
+        domain_traffic = pd.DataFrame(columns=['Domain', 'Total Estimated Traffic', 'Total Search Volume'])
+
 
     # Filter out "Unknown" domains
     domain_traffic = domain_traffic[domain_traffic['Domain'] != 'Unknown_Domain']
@@ -111,25 +135,29 @@ def process_file(uploaded_file, designated_domains):
         designated_domains_traffic = designated_domains_traffic.astype({'Rank': 'int', 'Total Estimated Traffic': 'int', 'Total Search Volume': 'int'})
 
     # Filter for top 20 domains and non-blank page URLs
-    top_pages = df[df['Ranked Domain Name'].isin(top_domains['Domain']) & (df['Ranked Page URL'] != '')]
+    if 'Ranked Domain Name' in df.columns and 'Ranked Page URL' in df.columns:
+        top_pages = df[df['Ranked Domain Name'].isin(top_domains['Domain']) & (df['Ranked Page URL'] != '')]
 
-    # Group by domain and page URL, and calculate total search volume and estimated traffic
-    top_pages = top_pages.groupby(['Ranked Domain Name', 'Ranked Page URL']).agg(
-        {'Search Volume': 'sum', 'Estimated Traffic': 'sum'}
-    ).reset_index()
+        # Group by domain and page URL, and calculate total search volume and estimated traffic
+        top_pages = top_pages.groupby(['Ranked Domain Name', 'Ranked Page URL']).agg(
+            {'Search Volume': 'sum', 'Estimated Traffic': 'sum'}
+        ).reset_index()
 
-    # Sort and filter top 3 pages for each domain by Estimated Traffic
-    top_pages = top_pages.sort_values(by=['Ranked Domain Name', 'Estimated Traffic'], ascending=[True, False])
-    top_pages = top_pages.groupby('Ranked Domain Name').head(3).reset_index(drop=True)
+        # Sort and filter top 3 pages for each domain by Estimated Traffic
+        top_pages = top_pages.sort_values(by=['Ranked Domain Name', 'Estimated Traffic'], ascending=[True, False])
+        top_pages = top_pages.groupby('Ranked Domain Name').head(3).reset_index(drop=True)
 
-    # Rename columns
-    top_pages.columns = ['Domain', 'Page URL', 'Total Search Volume', 'Total Estimated Traffic']
+        # Rename columns
+        top_pages.columns = ['Domain', 'Page URL', 'Total Search Volume', 'Total Estimated Traffic']
 
-    # Filter out "Unknown" domains from top_pages
-    top_pages = top_pages[top_pages['Domain'] != 'Unknown_Domain']
+        # Filter out "Unknown" domains from top_pages
+        top_pages = top_pages[top_pages['Domain'] != 'Unknown_Domain']
 
-    # Convert columns to appropriate types
-    top_pages = top_pages.astype({'Total Search Volume': 'int', 'Total Estimated Traffic': 'int'})
+        # Convert columns to appropriate types
+        top_pages = top_pages.astype({'Total Search Volume': 'int', 'Total Estimated Traffic': 'int'})
+    else:
+        top_pages = pd.DataFrame(columns=['Domain', 'Page URL', 'Total Search Volume', 'Total Estimated Traffic'])
+
 
     return top_domains, designated_domains_traffic, top_pages, domain_traffic
 
@@ -150,6 +178,7 @@ def create_sample_template():
     return output
 
 # Streamlit app
+st.set_page_config(layout="wide")
 st.title('Share of Voice Analysis Tool')
 st.write('### Created by: Brandon Lazovic')
 st.write('This tool allows you to upload keyword ranking data and get a share of voice analysis for the top domains.')
@@ -175,16 +204,28 @@ if uploaded_file:
 
     # Display results
     st.write('### Top 20 Domains by Estimated Traffic')
-    st.dataframe(top_domains)
+    if not top_domains.empty:
+        st.bar_chart(top_domains.set_index('Domain')['Total Estimated Traffic'])
+        with st.expander("View Top 20 Domains Data"):
+            st.dataframe(top_domains)
+    else:
+        st.write("No data available to display for top domains.")
+
 
     st.write('### Designated Domains Traffic')
     if not designated_domains_traffic.empty:
-        st.dataframe(designated_domains_traffic)
+        st.bar_chart(designated_domains_traffic.set_index('Domain')['Total Estimated Traffic'])
+        with st.expander("View Designated Domains Data"):
+            st.dataframe(designated_domains_traffic)
     else:
         st.write("No designated domains specified or not found in the data.")
 
     st.write('### Top 3 Pages for Top 20 Domains')
-    st.dataframe(top_pages)
+    if not top_pages.empty:
+        st.dataframe(top_pages)
+    else:
+        st.write("No data available to display for top pages.")
+
 
     # Provide download options
     st.write('### Download Results')
@@ -218,10 +259,10 @@ if uploaded_file:
 st.write('''
 ## Instructions
 1. Download the sample template and fill in your keyword data.
-2. Upload an Excel file with the following columns: 
+2. Upload an Excel file with the following columns:
    - Keywords
-   - Keyword Rankings (1-100)
-   - Keyword Search Volume
+   - Keyword Ranking (1-100)
+   - Search Volume
    - Ranked Domain Name (domain.com, subdomain.domain.com, www.domain.com, etc...)
    - Ranked Page URL (https://www.domain.com/page-url, subdomain.domain.com/page-url, etc...)
 3. Enter any designated domains you want to be returned, separated by commas.
